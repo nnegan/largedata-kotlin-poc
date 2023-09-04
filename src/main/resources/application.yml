@@ -1,0 +1,50 @@
+server:
+  port: 28080
+  tomcat:
+    threads:
+      max: 200
+  servlet:
+    context-path: /
+
+spring:
+  datasource:
+#    url: jdbc:postgresql://localhost:5432/postgres?rewriteBatchedStatements=true
+#    driver-class-name: org.postgresql.Driver
+#    hikari:
+#      username: pgtest
+#      password: rbmtest2022
+#      connection-timeout: 30000
+#      maximum-pool-size: 30
+
+    url: jdbc:mysql://localhost:3306/toy_dev?rewriteBatchedStatements=true
+    #url: jdbc:mysql://localhost:3306/toy_dev?rewriteBatchedStatements=true&profileSQL=true&logger=Slf4JLogger&maxQuerySizeToLog=999999
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      username: toy_dev
+      password: 1234
+      connection-timeout: 30000
+      maximum-pool-size: 30
+
+  jpa:
+    hibernate:
+      ddl-auto: none
+    properties:
+      hibernate:
+        format_sql: true
+        default_batch_fetch_size: 100
+        ## bulk insert ?? ##
+        # ?? ??
+        order_inserts: true
+        order_updates: true
+        # ?? ?? ??
+        jdbc.batch_size: 100
+
+logging:
+  level:
+    root: INFO
+#    feign: DEBUG
+    com.uhdc.pipe: DEBUG
+    #org.hibernate.SQL: debug
+    #org.hibernate.type: trace
+
+#    org.springframework.jdbc.core: DEBUG

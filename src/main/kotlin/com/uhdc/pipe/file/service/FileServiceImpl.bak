@@ -1,0 +1,204 @@
+package com.uhdc.pipe.file.service
+
+import com.uhdc.pipe.file.dao.SampleDao
+import com.uhdc.pipe.file.dao.SampleEntity
+import org.slf4j.LoggerFactory
+import org.springframework.dao.DataIntegrityViolationException
+import org.springframework.stereotype.Service
+import java.io.BufferedReader
+import java.io.File
+import java.io.FileReader
+import java.nio.file.Files
+import java.util.*
+import java.util.concurrent.ForkJoinPool
+
+
+// https://backtony.github.io/jpa/2021-08-12-jpa-springdatajpa-2/
+
+
+@Service
+class FileServiceImpl(
+    private val sampleDao: SampleDao,
+
+    ): FileService {
+
+    private val log = LoggerFactory.getLogger(javaClass)
+
+    var queue: Queue<List <List<SampleEntity>>> = LinkedList()
+
+    override fun fileRead() {
+
+        val path = "/Users/kimjihyung/source/uhdc/uhdc-pipe/testCsv.csv"
+
+        var lineList = mutableListOf<SampleEntity>()
+
+        log.debug("Start time")
+
+        val file = File(path)
+        var index = 0;
+        var sendIndex = 0;
+        var blockList = mutableListOf<List<SampleEntity>>()
+
+        val br = BufferedReader(FileReader(file))
+        br.forEachLine {
+            lineList += parseSample(it)
+            if ( index % 1000 == 0 ){
+               // log.debug("file cnt : {}", index)
+                blockList += lineList
+                lineList = mutableListOf<SampleEntity>()
+                if ( index % 20000 == 0 ) {
+                    //  queue.add(blockList)
+                    log.debug("file cnt : {}", sendIndex)
+                    //forkjoinPool.submit {
+                    this.parallelProc(blockList)
+                    //}
+                    blockList = mutableListOf<List<SampleEntity>>()
+                    log.debug("totalMemory : {}", Runtime.getRuntime().totalMemory())
+                    log.debug("usedMemory  : {}", Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory())
+                    sendIndex++
+                    //if ( index % 20000 == 0 ) runFlag = "Y"
+                }
+            }
+            index++;
+        }
+        br.close()
+
+        /*Files.readAllLines(file.toPath()).forEach{
+            lineList += parseSample(it)
+            if ( index % 1000 == 0 ){
+                log.debug("file cnt : {}", index)
+                blockList += lineList
+                lineList = mutableListOf<SampleEntity>()
+                if ( index % 10000 == 0 ) {
+                  //  queue.add(blockList)
+
+                    this.parallelProc(blockList)
+                    blockList = mutableListOf<List<SampleEntity>>()
+                    //log.debug("call parallel : {}", sendIndex)
+                    //log.debug("totalMemory : {}", Runtime.getRuntime().totalMemory())
+                    //log.debug("usedMemory  : {}", Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory())
+                    //log.debug("freeMemory  : {}", Runtime.getRuntime().freeMemory())
+                    sendIndex++
+                    //if ( index % 20000 == 0 ) runFlag = "Y"
+                }
+            }
+            index++;
+        }*/
+        log.debug("End time")
+        log.debug("lineList size {}", lineList.size)
+        log.debug("blockList size {}", blockList.size)
+
+       /* val blockCnt = lineList.size / 100000
+
+
+        var cnt = 0;
+        for (i in 0..blockCnt) {
+
+            for ( cnt in cnt .. cnt + 10000)
+                blockList += lineList
+
+            cnt = blockCnt * 10000
+        }*/
+        log.debug("insert time")
+
+        var countIdx = 0;
+
+       // val forkjoinPool = ForkJoinPool(20)
+
+        /*
+        forkjoinPool.submit {
+            blockList.parallelStream()
+                .forEach { block ->
+                    try {
+                        var time = System.currentTimeMillis()
+                        //log.debug("totalMemory : {}", Runtime.getRuntime().totalMemory())
+                        //log.debug("usedMemory  : {}", Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory())
+                        //log.debug("freeMemory  : {}", Runtime.getRuntime().freeMemory())
+                        log.debug("countIdx : {}", countIdx)
+                        countIdx ++
+                        //sampleDao.saveAll(block)
+                        sampleDao.insertSampleList(block)// 만개씩 save
+                        log.debug("time taken : {}", System.currentTimeMillis() - time)
+                    } catch (e: DataIntegrityViolationException) { // 키 중복 예외 발생
+                        // 로그 찍기
+                        log.error("dup Error : {}", e)
+                    }
+                }
+        }*/
+/*
+        for (i in 0..blockList.size) {
+            try {
+                var time = System.currentTimeMillis()
+                log.debug("insert Block count : {}", i)
+                log.debug("totalMemory : {}", Runtime.getRuntime().totalMemory())
+                log.debug("usedMemory  : {}", Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory())
+                log.debug("freeMemory  : {}", Runtime.getRuntime().freeMemory())
+                sampleDao.insertSampleList(blockList.get(i))// 만개씩 save
+                log.debug("time taken : {}", System.currentTimeMillis() - time)
+            } catch (e: DataIntegrityViolationException) { // 키 중복 예외 발생
+                // 로그 찍기
+            }
+        }*/
+
+
+
+        /*lineList.forEach {
+            log.debug(it.toString())
+        }*/
+    }
+    var runFlag = "N"
+    var parallelProcCnt = 0;
+
+    // n개씩만 돌릴 수 없을까??
+    fun running(){
+
+        val forkjoinPool = ForkJoinPool(10)
+
+        while( true ){
+            log.debug("queue size : {}", queue.size)
+            if ( runFlag.equals("Y") && parallelProcCnt < 10 ){
+                forkjoinPool.submit {
+                    this.parallelProc(queue.poll())
+                    log.debug("Thread -> {}", Thread.currentThread())
+                }
+                parallelProcCnt++
+                log.debug("totalMemory : {}", Runtime.getRuntime().totalMemory())
+                log.debug("usedMemory  : {}", Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory())
+                log.debug("parallelProcCnt : {}", parallelProcCnt)
+
+                if ( queue.isEmpty() ) break
+            }
+            Thread.sleep(1000)
+        }
+    }
+    fun parallelProc(blockList: List <List<SampleEntity>>){
+        var countIdx = 0
+        //log.debug("parallelProc Start : {}", parallelProcCnt)
+//        val forkjoinPool = ForkJoinPool(3)
+
+//        forkjoinPool.submit {
+            blockList.parallelStream()
+                .forEach { block ->
+                    try {
+                        //var time = System.currentTimeMillis()
+                        //log.debug("freeMemory  : {}", Runtime.getRuntime().freeMemory())
+                       // log.debug("countIdx : {}", countIdx)
+                      //  countIdx ++
+                        //sampleDao.saveAll(block)
+                        sampleDao.insertSampleList(block)// 만개씩 save
+                        //log.debug("time taken : {}", System.currentTimeMillis() - time)
+                    } catch (e: DataIntegrityViolationException) { // 키 중복 예외 발생
+                        // 로그 찍기
+                        log.error("dup Error : {}", e)
+                    }
+                }
+        //log.debug("parallelProc End : {}", parallelProcCnt)
+       //}
+       // forkjoinPool.shutdown()
+
+    }
+    fun parseSample(line: String): SampleEntity {
+    val arr = line.split(",")
+    return SampleEntity(arr[0].toLong(), arr[1], arr[2], arr[3], arr[4], arr[5], arr[6], arr[7], arr[8], arr[9], arr[10], arr[11], arr[12], arr[13], arr[14], arr[15], arr[16], arr[17], arr[18], arr[19], arr[20])
+    }
+}
